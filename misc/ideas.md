@@ -64,6 +64,26 @@ before reward and is suppressed by it (Fig. 4).
   (a reward-anticipation signal), quantify their enrichment across visual areas in task vs
   unsupervised mice, and confirm the signal reflects expectation rather than licking.
 
+### Method note — reward ablation: zero-out first, refit to confirm
+
+Per-neuron linear encoding model (full method in `project-meeting.md` / `method-flowchart.pdf`):
+predict each neuron's ΔF/F from stimulus + position + velocity + reward, then remove reward
+and see if test error rises. Two ways to remove reward:
+
+- **Zero-out (try FIRST):** keep the fitted weights, set the reward input to 0 at inference.
+  Cheap — fit the full model once, get the ablated prediction for free. Good fast screen over a
+  **small subset** of neurons (we are NOT running all ~90k). Downside: with the fitted stimulus
+  weights frozen, they can't absorb reward's share.
+- **Refit (do SECOND, to confirm):** drop the reward column and re-estimate the weights, so
+  stimulus/position/velocity can compensate. This is the honest "unique variance" test.
+
+**Why both:** reward and stimulus are correlated in the task (reward only in the leaf corridor),
+so zero-out **over-credits reward** — it can flag a neuron as reward-encoding when stimulus alone
+would explain it. So treat a zero-out hit as a *candidate* only, and re-test it with the refit
+before believing it. The permutation test does not rescue this (shuffling reward breaks the
+correlation, so the null can't see the inflation). Also confirm reward is coded {0,1} — zero only
+means "reward absent" if the off-state is genuinely 0.
+
 **A vs B in one line:** A = measure how much of the change is reward-free (shared), by region.
 B = find and localize the change that only reward produces.
 
