@@ -1,0 +1,7 @@
+# PROJECT PROPOSAL NEUROMATCH
+
+Learning-related plasticity in visual cortex is usually attributed to reward and task feedback, but recent work (Zhong et al., 2025) shows most of it is unsupervised, driven by visual experience alone, while a distinct reward-prediction signal in anterior higher visual areas (HVAs) is the one clearly supervised component. We build on that dissociation by asking: which individual neurons encode reward, and how does the proportion of reward-encoding neurons change during learning?
+
+Using the Zhong et al. two-photon mesoscope dataset (up to ~80,000 neurons across V1 and medial/lateral/anterior HVAs, supervised vs. unsupervised cohorts), we fit a per-neuron linear encoding model predicting each neuron's calcium activity from stimulus identity (leaf vs. circle), corridor position, running velocity, and reward. To isolate reward's unique contribution, we remove the reward regressor (zero-out as a fast screen, then refit to confirm) and measure the rise in held-out prediction error, testing significance against a permutation test built by shuffling reward across trials. Neurons whose fit depends significantly on reward are classified as reward-encoding, and we track their proportion across training days by brain region, cohort, and stimulus type.
+
+We predict reward-encoding neurons concentrate in anterior HVAs and largely vanish in the unsupervised cohort, mirroring the paper's reward-prediction findings. 
