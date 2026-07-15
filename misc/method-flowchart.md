@@ -44,13 +44,14 @@ flowchart TB
 
     EFULL --> ABL
     ABL["`**OMISSION / ABLATION**
-    drop the reward column from X, refit, predict;
-    error_reduced = MSE on held-out 20%`"]
+    keep fitted weights fixed; set the reward regressor to 0
+    on held-out data, predict again (no refitting);
+    error_zeroed = MSE(y, ŷ_zeroed)`"]
 
     ABL --> DSTAT
     DSTAT["`**EFFECT SIZE (per neuron)**
-    d = error_reduced − error_full
-    d > 0 ⇒ reward improved the fit`"]
+    d = error_zeroed − error_full
+    d > 0 ⇒ observed reward input improved the prediction`"]
 
     DSTAT --> PERM
     PERM["`**PERMUTATION TEST**
