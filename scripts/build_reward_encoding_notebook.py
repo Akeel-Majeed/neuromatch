@@ -891,7 +891,10 @@ def build_notebook():
             if not np.isfinite(X).all():
                 raise ValueError("Transformed design matrix contains non-finite values")
 
-            trial_ids = np.rint(np.asarray(beh["ft_trInd"], dtype=float)).astype(np.int64)
+            frame_trials = np.asarray(beh["ft_trInd"], dtype=float)
+            trial_ids = np.zeros(len(frame_trials), dtype=np.int64)
+            finite_trials = np.isfinite(frame_trials)
+            trial_ids[finite_trials] = np.rint(frame_trials[finite_trials]).astype(np.int64)
             train_groups = trial_ids[train_mask]
             manifest = pd.DataFrame([
                 {
@@ -1137,6 +1140,9 @@ def build_notebook():
             """
         ),
     ]
+    # Stable cell ids make regeneration byte-for-byte deterministic.
+    for index, cell in enumerate(nb.cells):
+        cell["id"] = f"reward-pilot-{index:03d}"
     return nb
 
 

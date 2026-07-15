@@ -13,7 +13,7 @@ This is a one-mouse, one-session feasibility pilot. It may identify candidate re
 - Map `iarea` values to `V1=8`, `mHV={0,1,2,9}`, `lHV={5,6}`, and `aHV={3,4}`. Ignore unmapped values `-1` and `7`.
 - With NumPy RNG seed 42, sample 250 neurons without replacement from each mapped region. Sampling is independent of neural activity and produces a fixed 1,000-neuron pilot.
 - Reconstruct only the selected neurons as `U[:, selected_indices].T @ V`, yielding frames × neurons after transposition. Do not reconstruct the full 71,069-neuron matrix.
-- Align neural and behavioral arrays by neural frame. Raise a descriptive error if their lengths differ rather than silently truncating. Retain finite frames assigned to a trial; the design matrix controls for movement and corridor/gray epochs, so both moving and stationary within-trial frames remain eligible.
+- Align neural and behavioral arrays by neural frame. The official session has one final behavior sample with no matching SVD frame; validate that the mismatch is exactly this single terminal sample, report it, and remove it from every frame-aligned behavioral field. Raise a descriptive error for any other length mismatch rather than silently truncating. Retain finite frames assigned to a trial; the design matrix controls for movement and corridor/gray epochs, so both moving and stationary within-trial frames remain eligible.
 
 ## Design matrix and model
 
@@ -65,5 +65,5 @@ Downloads use streamed requests with timeouts, status checks, temporary `.part` 
 
 - Zhong's SVD reconstruction is the available after-learning neural target and is suitable for this feasibility test; it is not raw fluorescence.
 - The expanded design matrix and ridge model supersede the earlier four-predictor OLS sketch, while MSE remains the requested primary prediction-error metric.
-- Odd/even trial splitting follows Zhong's supplied masks and the design-matrix flowchart, superseding the older 80/20 wording.
+- Odd/even trial splitting follows Zhong's supplied masks and the design-matrix flowchart, superseding the older 80/20 wording. Because trial IDs are zero-based, Zhong's “odd” mask contains the first, third, fifth, and subsequent alternating trials (IDs 0, 2, 4, …); derive masks by alternating sorted trial IDs and verify them against the supplied masks.
 - Raw `p < 0.05` is retained by user choice despite the multiple-testing caveat.

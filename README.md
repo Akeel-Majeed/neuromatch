@@ -3,6 +3,25 @@
 Working repo for our Neuromatch Academy project on Zhong et al. 2025 (mouse visual
 cortex, supervised/unsupervised learning).
 
+## Reward-encoding pilot notebook
+
+[![Open the reward-encoding pilot in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Akeel-Majeed/neuromatch/blob/master/src/reward_encoding_pilot_colab.ipynb)
+
+The self-contained [reward-encoding pilot notebook](src/reward_encoding_pilot_colab.ipynb)
+downloads Zhong's supervised after-learning session directly from Figshare, samples
+1,000 neurons evenly across V1 and medial/lateral/anterior HVAs, constructs the
+expanded design matrix, fits ridge encoding models, computes held-out MSE and R²,
+and runs zero-out, refit, and 199-permutation reward tests.
+
+Open it in Colab and choose **Runtime → Run all**. The default run downloads about
+258 MB and was verified on the full data in about 3.2 minutes with approximately
+1.0 GB peak memory (download speed and Colab hardware will vary). It produces
+`reward_encoding_pilot_results.csv` and
+`reward_encoding_pilot_run_manifest.json`, then offers both files for download.
+
+This is a one-mouse, one-session feasibility analysis. Its raw neuron-level
+`p < 0.05` classifications are exploratory and are not animal-level evidence.
+
 ## Git workflow (start here if you're new to GitHub)
 
 We use one simple rule: **nobody commits to `master` directly. You make a branch,

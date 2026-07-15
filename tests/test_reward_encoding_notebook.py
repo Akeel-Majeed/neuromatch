@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -36,6 +38,29 @@ def test_notebook_is_colab_ready_and_self_contained():
     assert "from src" not in source and "import reward_encoding" not in source
     assert "N_PER_REGION = 250" in source
     assert "N_PERMUTATIONS = 199" in source
+    assert all(cell.get("execution_count") is None for cell in nb["cells"] if cell["cell_type"] == "code")
+    assert all(not cell.get("outputs") for cell in nb["cells"] if cell["cell_type"] == "code")
+
+
+def test_code_cells_compile_and_cell_ids_are_unique():
+    nb = load_notebook()
+    code_cells = [cell for cell in nb["cells"] if cell["cell_type"] == "code"]
+    for index, cell in enumerate(code_cells):
+        compile("".join(cell["source"]), f"notebook-cell-{index}", "exec")
+    ids = [cell["id"] for cell in nb["cells"]]
+    assert len(ids) == len(set(ids))
+
+
+def test_notebook_generation_is_deterministic(tmp_path):
+    before = NOTEBOOK.read_bytes()
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "build_reward_encoding_notebook.py")],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert NOTEBOOK.read_bytes() == before
 
 
 def test_required_sections_exist():

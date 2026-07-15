@@ -1,6 +1,6 @@
 # Reward-Encoding Pilot Colab Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build and verify a self-contained Colab notebook that downloads Zhong's supervised after-learning session and runs the 1,000-neuron expanded-ridge reward-encoding pilot end to end.
 
@@ -23,7 +23,7 @@
 - Create: `tests/test_reward_encoding_notebook.py`
 - Create: `scripts/build_reward_encoding_notebook.py`
 
-- [ ] **Step 1: Write structural tests before the builder exists**
+- [x] **Step 1: Write structural tests before the builder exists**
 
 ```python
 from pathlib import Path
@@ -56,13 +56,13 @@ def test_required_sections_exist():
         assert heading in source
 ```
 
-- [ ] **Step 2: Run the tests and verify the expected failure**
+- [x] **Step 2: Run the tests and verify the expected failure**
 
 Run: `pytest tests/test_reward_encoding_notebook.py -v`
 
 Expected: FAIL because `src/reward_encoding_pilot_colab.ipynb` does not exist.
 
-- [ ] **Step 3: Add a deterministic builder skeleton**
+- [x] **Step 3: Add a deterministic builder skeleton**
 
 ```python
 #!/usr/bin/env python3
@@ -98,13 +98,13 @@ if __name__ == "__main__":
     print(OUTPUT)
 ```
 
-- [ ] **Step 4: Generate the skeleton and confirm only content assertions fail**
+- [x] **Step 4: Generate the skeleton and confirm only content assertions fail**
 
 Run: `python3 scripts/build_reward_encoding_notebook.py && pytest tests/test_reward_encoding_notebook.py -v`
 
 Expected: notebook JSON loads; tests fail on missing session/configuration/section content.
 
-- [ ] **Step 5: Commit the contract**
+- [x] **Step 5: Commit the contract**
 
 ```bash
 git add scripts/build_reward_encoding_notebook.py src/reward_encoding_pilot_colab.ipynb tests/test_reward_encoding_notebook.py
@@ -118,7 +118,7 @@ git commit -m "test: define reward encoding notebook contract"
 - Regenerate: `src/reward_encoding_pilot_colab.ipynb`
 - Modify: `tests/test_reward_encoding_notebook.py`
 
-- [ ] **Step 1: Add helper-cell extraction and focused unit tests**
+- [x] **Step 1: Add helper-cell extraction and focused unit tests**
 
 ```python
 import numpy as np
@@ -158,13 +158,13 @@ def test_trial_masks_do_not_leak():
     assert set(trials[test]) == {2, 4}
 ```
 
-- [ ] **Step 2: Run the focused tests and verify helper names are missing**
+- [x] **Step 2: Run the focused tests and verify helper names are missing**
 
 Run: `pytest tests/test_reward_encoding_notebook.py -k 'region or event or trial' -v`
 
 Expected: FAIL with missing `map_regions`, `balanced_sample`, `event_basis`, and `odd_even_masks`.
 
-- [ ] **Step 3: Implement the notebook's configuration and download layer**
+- [x] **Step 3: Implement the notebook's configuration and download layer**
 
 Add cells defining the exact runtime constants and a safe downloader:
 
@@ -197,7 +197,7 @@ def download_figshare_file(file_id, filename, data_dir=DATA_DIR):
     return target
 ```
 
-- [ ] **Step 4: Implement validation, region mapping, balanced sampling, and selected-neuron reconstruction**
+- [x] **Step 4: Implement validation, region mapping, balanced sampling, and selected-neuron reconstruction**
 
 ```python
 AREA_CODES = {"V1": (8,), "mHV": (0, 1, 2, 9), "lHV": (5, 6), "aHV": (3, 4)}
@@ -226,7 +226,7 @@ def reconstruct_selected(svd, selected):
     return (U[:, selected].T @ V).T.astype(np.float32, copy=False)
 ```
 
-- [ ] **Step 5: Implement raised-cosine bases, event expansion, split validation, and the block manifest**
+- [x] **Step 5: Implement raised-cosine bases, event expansion, split validation, and the block manifest**
 
 Use a single `DesignMatrix` dataclass containing `raw`, `names`, and `blocks`. `build_design_matrix(beh)` must create stimulus, 12-position, position×stimulus, speed, movement, acceleration, eight reward, eight lick, eight cue, four epoch, and eighteen landmark columns with the windows fixed in the design spec. `event_basis` clips kernels at recording boundaries and ignores NaN/out-of-range event indices. `odd_even_masks` derives split membership from integer-valued finite `ft_trInd` and raises if either split is empty.
 
@@ -249,13 +249,13 @@ def odd_even_masks(frame_trials):
     return train, test
 ```
 
-- [ ] **Step 6: Regenerate and run unit tests**
+- [x] **Step 6: Regenerate and run unit tests**
 
 Run: `python3 scripts/build_reward_encoding_notebook.py && pytest tests/test_reward_encoding_notebook.py -v`
 
 Expected: all structural and helper tests for Task 2 PASS.
 
-- [ ] **Step 7: Commit the data and design-matrix layer**
+- [x] **Step 7: Commit the data and design-matrix layer**
 
 ```bash
 git add scripts/build_reward_encoding_notebook.py src/reward_encoding_pilot_colab.ipynb tests/test_reward_encoding_notebook.py
@@ -269,7 +269,7 @@ git commit -m "feat: add Zhong data and design matrix pipeline"
 - Regenerate: `src/reward_encoding_pilot_colab.ipynb`
 - Modify: `tests/test_reward_encoding_notebook.py`
 
-- [ ] **Step 1: Add metric, transformation, and p-value tests**
+- [x] **Step 1: Add metric, transformation, and p-value tests**
 
 ```python
 def test_metrics_and_corrected_permutation_pvalues():
@@ -292,13 +292,13 @@ def test_zero_out_uses_transformed_reward_absence():
     np.testing.assert_allclose(zeroed[:, 0], expected_absent)
 ```
 
-- [ ] **Step 2: Run the new tests and verify expected missing-function failures**
+- [x] **Step 2: Run the new tests and verify expected missing-function failures**
 
 Run: `pytest tests/test_reward_encoding_notebook.py -k 'metric or zero_out' -v`
 
 Expected: FAIL with missing modeling helper functions.
 
-- [ ] **Step 3: Implement training-only transformation and grouped alpha selection**
+- [x] **Step 3: Implement training-only transformation and grouped alpha selection**
 
 `fit_transformer` records kept columns, means, scales, binary flags, transformed block indices, and the transformed reward-absent vector. `select_alpha` evaluates `[0.01, 0.1, 1, 10, 100, 1000]` with three `GroupKFold` splits over odd trial IDs and returns the alpha with minimum mean neuron-averaged validation MSE. All ridge fits use `fit_intercept=True` and multi-target `Y`.
 
@@ -314,11 +314,11 @@ def fit_ridge(X, Y, alpha):
     return Ridge(alpha=float(alpha), fit_intercept=True).fit(X, Y)
 ```
 
-- [ ] **Step 4: Implement full, zero-out, and reduced fits**
+- [x] **Step 4: Implement full, zero-out, and reduced fits**
 
 Fit the full model on odd rows, predict even rows, then replace the reward columns with their transformed raw-zero values for the zero-out prediction. Fit the reduced model on matrices with transformed reward indices removed. Return full/zero/reduced MSE and R², `delta_mse_zero`, `delta_mse_refit`, `delta_r2_refit`, and full-model reward coefficients.
 
-- [ ] **Step 5: Implement deterministic reward-timing permutations for all neurons**
+- [x] **Step 5: Implement deterministic reward-timing permutations for all neurons**
 
 Map each finite `RewardFr` event to its trial ID. For each permutation, permute event offsets relative to trial starts among reward-bearing trials, rebuild the raw reward basis while keeping all other columns fixed, apply the original training transformer, refit the full model at the selected alpha, and calculate the refit-style held-out ΔMSE against the fixed reduced-model MSE. Store a `(199, 1000)` float32 null matrix and calculate:
 
@@ -331,21 +331,21 @@ def permutation_pvalues(observed, null):
 
 Candidate status is `(delta_mse_refit > 0) & (p_value < 0.05)` with no screening restriction.
 
-- [ ] **Step 6: Add figures and exports**
+- [x] **Step 6: Add figures and exports**
 
 Create data-QC tables, block manifest, alpha-CV curve, held-out metric histograms, zero-out/refit scatter, representative null distributions, representative reward coefficients, and region summary with Wilson 95% intervals. Export `reward_encoding_pilot_results.csv` and `reward_encoding_pilot_run_manifest.json` under `/content`, assert their schemas after writing, and offer `google.colab.files.download` only when running in Colab.
 
-- [ ] **Step 7: Add a synthetic recovery cell and tests**
+- [x] **Step 7: Add a synthetic recovery cell and tests**
 
 The tagged synthetic cell builds grouped trials, nuisance features, an event reward block, one injected reward target, and null targets. It must assert the injected target has positive refit ΔMSE and a smaller permutation p-value than the median null p-value. Add a pytest that executes this tagged cell after helper cells.
 
-- [ ] **Step 8: Regenerate and run all data-independent tests**
+- [x] **Step 8: Regenerate and run all data-independent tests**
 
 Run: `python3 scripts/build_reward_encoding_notebook.py && pytest tests/test_reward_encoding_notebook.py -v`
 
 Expected: all tests PASS.
 
-- [ ] **Step 9: Commit the completed analysis notebook**
+- [x] **Step 9: Commit the completed analysis notebook**
 
 ```bash
 git add scripts/build_reward_encoding_notebook.py src/reward_encoding_pilot_colab.ipynb tests/test_reward_encoding_notebook.py
@@ -360,11 +360,11 @@ git commit -m "feat: add reward encoding ridge analysis"
 - Regenerate if changed: `src/reward_encoding_pilot_colab.ipynb`
 - Modify if needed: `tests/test_reward_encoding_notebook.py`
 
-- [ ] **Step 1: Add the notebook link and usage instructions**
+- [x] **Step 1: Add the notebook link and usage instructions**
 
 Add a README section that links `src/reward_encoding_pilot_colab.ipynb`, tells the user to upload/open it in Colab and choose **Runtime → Run all**, states the default download size/runtime configuration, and names the generated CSV/JSON outputs.
 
-- [ ] **Step 2: Validate deterministic generation and notebook syntax**
+- [x] **Step 2: Validate deterministic generation and notebook syntax**
 
 Run:
 
@@ -378,17 +378,17 @@ python3 -m json.tool src/reward_encoding_pilot_colab.ipynb >/dev/null
 
 Expected: `cmp` exits 0 and JSON validation succeeds.
 
-- [ ] **Step 3: Execute the synthetic notebook path cleanly**
+- [x] **Step 3: Execute the synthetic notebook path cleanly**
 
 Run: `pytest tests/test_reward_encoding_notebook.py -v`
 
 Expected: all structural, unit, and synthetic recovery tests PASS.
 
-- [ ] **Step 4: Execute the real-data notebook end to end**
+- [x] **Step 4: Execute the real-data notebook end to end**
 
 Run the notebook with `nbclient` from a fresh working directory using the default `N_PER_REGION=250` and `N_PERMUTATIONS=199`, allowing sufficient cell timeout for downloads and permutations. Capture elapsed time and maximum resident memory. Expected: every cell succeeds; the notebook prints 1,000 selected neurons, nonempty odd/even splits, full/reduced metrics, and a region summary; both export files exist and parse successfully.
 
-- [ ] **Step 5: Re-run verification after any fixes**
+- [x] **Step 5: Re-run verification after any fixes**
 
 Run:
 
@@ -401,7 +401,7 @@ git status --short
 
 Expected: all tests PASS, no whitespace errors, and only intended files are modified.
 
-- [ ] **Step 6: Commit documentation and verified fixes**
+- [x] **Step 6: Commit documentation and verified fixes**
 
 ```bash
 git add README.md scripts/build_reward_encoding_notebook.py src/reward_encoding_pilot_colab.ipynb tests/test_reward_encoding_notebook.py
