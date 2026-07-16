@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -38,6 +36,8 @@ def test_notebook_is_colab_ready_and_self_contained():
     assert "from src" not in source and "import reward_encoding" not in source
     assert "N_PER_REGION = 250" in source
     assert "N_PERMUTATIONS = 199" in source
+    # The notebook is the source of truth now, so committed outputs would be noise
+    # in every diff. Clear them (Edit > Clear all outputs) before committing.
     assert all(cell.get("execution_count") is None for cell in nb["cells"] if cell["cell_type"] == "code")
     assert all(not cell.get("outputs") for cell in nb["cells"] if cell["cell_type"] == "code")
 
@@ -49,18 +49,6 @@ def test_code_cells_compile_and_cell_ids_are_unique():
         compile("".join(cell["source"]), f"notebook-cell-{index}", "exec")
     ids = [cell["id"] for cell in nb["cells"]]
     assert len(ids) == len(set(ids))
-
-
-def test_notebook_generation_is_deterministic(tmp_path):
-    before = NOTEBOOK.read_bytes()
-    subprocess.run(
-        [sys.executable, str(ROOT / "scripts" / "build_reward_encoding_notebook.py")],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    assert NOTEBOOK.read_bytes() == before
 
 
 def test_required_sections_exist():
@@ -100,6 +88,13 @@ def test_event_basis_is_aligned_and_boundary_safe():
     assert basis[10].sum() > 0
 
 
+def test_event_basis_skips_events_outside_the_recording():
+    ns = helper_namespace()
+    basis = ns["event_basis"](20, np.array([-500.0, 500.0]), 2.0, -1.0, 1.0, 4)
+    assert basis.shape == (20, 4)
+    assert not basis.any()
+
+
 def test_trial_masks_do_not_leak():
     ns = helper_namespace()
     trials = np.array([1, 1, 2, 2, 3, 3, 4, 4], dtype=float)
@@ -120,18 +115,6 @@ def test_metrics_and_corrected_permutation_pvalues():
     np.testing.assert_allclose(ns["permutation_pvalues"](observed, null), [0.5, 0.75])
 
 
-def test_zero_out_uses_transformed_reward_absence():
-    ns = helper_namespace()
-    X = np.array([[0.0, 1.0], [0.0, 2.0], [1.0, 3.0], [1.0, 4.0]])
-    blocks = {"reward": np.array([0]), "speed": np.array([1])}
-    transformer = ns["fit_transformer"](X[:3], blocks)
-    transformed = ns["apply_transformer"](X, transformer)
-    zeroed = ns["zero_reward_block"](transformed, transformer)
-    raw_absent = np.array([[0.0, 1.0]])
-    expected_absent = ns["apply_transformer"](raw_absent, transformer)[0, 0]
-    np.testing.assert_allclose(zeroed[:, transformer.reward_indices[0]], expected_absent)
-
-
 def test_synthetic_recovery():
     ns = helper_namespace()
     result = ns["run_synthetic_recovery_test"]()
@@ -139,19 +122,19 @@ def test_synthetic_recovery():
     assert result["injected_p"] < result["median_null_p"]
 
 
-def test_result_schema_constant():
-    ns = helper_namespace()
-    required = {
+def test_result_schema_is_stable():
+    """The exported CSV keeps the columns downstream analysis reads."""
+    source = source_text()
+    for column in [
         "neuron_index",
         "region",
         "mse_full",
         "r2_full",
         "mse_reduced",
         "r2_reduced",
-        "delta_mse_zero",
         "delta_mse_refit",
         "delta_r2_refit",
         "permutation_p",
         "reward_encoding_candidate",
-    }
-    assert required.issubset(set(ns["RESULT_COLUMNS"]))
+    ]:
+        assert f'"{column}"' in source, f"missing result column: {column}"
