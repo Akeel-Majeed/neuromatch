@@ -34,7 +34,7 @@ def test_notebook_is_colab_ready_and_self_contained():
     assert "VR2_2021_04_06_1" in source
     assert "54866333" in source and "54183860" in source and "54184214" in source
     assert "from src" not in source and "import reward_encoding" not in source
-    assert "N_PER_REGION = 250" in source
+    assert "N_PER_REGION = 750" in source
     assert "N_PERMUTATIONS = 199" in source
     # The notebook is the source of truth now, so committed outputs would be noise
     # in every diff. Clear them (Edit > Clear all outputs) before committing.
@@ -120,6 +120,20 @@ def test_synthetic_recovery():
     result = ns["run_synthetic_recovery_test"]()
     assert result["injected_delta_mse"] > 0
     assert result["injected_p"] < result["median_null_p"]
+
+
+def test_part_b_uses_reward_ablation_supervised_only():
+    """Part B migrated from d'(late vs early cue) to the reward ablation.
+
+    The ablated block is water delivery, which only exists for supervised
+    mice, so Part B tracks the supervised cohort only.
+    """
+    source = source_text()
+    assert "reward_ablation_session" in source
+    assert "N_PERMUTATIONS_OVERTIME" in source
+    for removed in ["DPRIME_THRESHOLD", "_reward_encoding", "reward_dprime_session",
+                    "Beh_unsup", "N_SHUFFLES_OVERTIME", "REWARD_ZONE_DM"]:
+        assert removed not in source, f"stale d'-era Part B content: {removed}"
 
 
 def test_result_schema_is_stable():
