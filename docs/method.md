@@ -1,59 +1,98 @@
-# Method — Identifying Reward-Encoding Neurons
+# Method — Reward-Encoding Neurons across Learning
 
-*Distilled from `method-flowchart.pdf`. Per-neuron linear encoding model with an omission test and permutation validation, on the Zhong et al. 2025 data.*
+*Distilled from `method-flowchart.pdf`. **Primary method:** cross-validated
+d′(late vs early cue), tracked across training days by region and cohort. The
+per-neuron encoding-model **ablation** is retained as a single-session
+validation. On the Zhong et al. 2025 data.*
 
 ## Goal
 
-Identify **reward-encoding neurons** and track how their proportion changes across training days — broken down by brain region, cohort (supervised vs. unsupervised), and stimulus type (leaf vs. circle).
+Track how the **proportion** and the **activation** (signal strength) of
+**reward-encoding neurons** change across training days — broken down by brain
+region and by cohort (supervised vs. unsupervised).
 
-## Inputs
+## Why the method changed from the proposal
 
-- **Neural data:** neurons × time, ΔF/F fluorescence (a proxy for firing rate).
-- **Design matrix X** (time × variables): stimulus type (leaf/circle, binary), position in corridor, velocity, and reward presence.
+The proposal specified the encoding-model **ablation** both to classify reward
+neurons and to track their proportion across days. We kept the ablation as a
+one-session validation but switched the **across-days tracking to a
+cross-validated d′(late vs early cue)**, for two reasons:
 
-## Pipeline
+1. **Cross-cohort fairness.** The ablation keys off *water delivery*, which does
+   not exist in the unsupervised cohort — so unsupervised would score zero *by
+   construction*, a circular result. d′ keys off the **sound cue** (whose position
+   tracks the reward zone) and the cue exists with or without water, following the
+   authors' own `utils.py`. This makes supervised-vs-unsupervised a fair test.
+2. **Comparability.** d′(late vs early), `|d′| ≥ 0.3`, is Zhong et al.'s own
+   definition of a reward-prediction neuron (their Fig. 4f–g), so our per-region
+   percentages line up with the paper.
 
-1. **Preprocess.** Bin ΔF/F into time bins, take the mean per bin, and align the neural data and X on the same time axis.
-2. **Split by trial.** 80% train / 20% test — split by *trial*, not by bin, because bins within a trial are correlated and would otherwise leak.
-3. **Fit the full model** (one per neuron): `y = Xθ`, estimating θ by least squares (Gaussian MLE) on the training trials.
-4. **Full test error.** Predict ŷ on the held-out 20%; `error_full = MSE(y, ŷ)`.
-5. **Omission / ablation.** Remove the reward regressor, refit, and predict again to get `error_reduced` on the same held-out trials.
-6. **Effect size (per neuron).** `d = error_reduced − error_full`. A positive d means reward improved the fit.
-7. **Permutation test.** Shuffle the reward column across trials, refit, and recompute d; repeat ~1,000× to build a null distribution of d.
-8. **p-value.** `p = fraction of shuffled d ≥ true d`. A small but steady d can beat a large noisy one — significance is d relative to the spread of its null, not its raw size.
-9. **Classify.** A neuron is "reward-encoding" if `p < threshold`.
-10. **Aggregate.** Compute the proportion of reward-encoding neurons across training days, by brain region, supervised vs. unsupervised, and leaf vs. circle.
+## Inputs (shared)
+
+- **Neural data:** up to ~80k neurons, provided SVD(400-PC)-compressed; we
+  reconstruct a large sample **per region** (V1 · medial · lateral · anterior),
+  much larger than the earlier 1,000-neuron pilot.
+- **Behavior:** sound-cue position (≈ reward-zone position), trial structure,
+  corridor position, running.
+
+## Primary pipeline — d′(late vs early cue), across days
+
+1. **Sample neurons** per region per mouse (capped at what each region has).
+2. **Reward-zone activity.** For each rewarded-corridor (leaf1) trial, take each
+   neuron's mean activity in the reward zone (5–40 dm).
+3. **Split trials** by cue position: early-cue vs late-cue. The cue tracks reward,
+   and exists in both cohorts.
+4. **Cross-validated d′** (per neuron): split the trials into two interleaved
+   folds and compute `d′ = 2(μ_late − μ_early)/(σ_late + σ_early)` in each.
+5. **Classify (flag).** A neuron is reward-encoding if `|d′| ≥ 0.3` in **both**
+   folds with the **same sign**. Cross-validation is essential: a single-pass
+   `|d′| ≥ 0.3` on a few dozen trials is cleared by noise ~a third of the time;
+   requiring both folds to agree collapses that false-positive rate.
+6. **Activation (strength).** For *all* sampled neurons (unbiased), record the
+   mean `|d′|` across folds — how strongly the neuron tracks reward timing.
+7. **Aggregate — the mouse is the replicate.** Per mouse, compute the **percentage
+   of reward-encoding neurons** (how many) and the **mean d′** (how strongly),
+   then take mean ± s.e.m. **across mice**, for each stage × region × cohort.
+   Neurons within a mouse are *not* independent replicates.
+8. **Shuffle floor.** Scramble the late/early labels, rerun the *same*
+   cross-validated test, and average — the chance % expected from noise.
+
+## Validation — encoding-model ablation (one session)
+
+A single-session check that the reward signal is real beyond the cue index:
+
+1. Build a design matrix X (stimulus, position bases, velocity, reward & cue lag
+   bases). Fit a per-neuron ridge model on train trials.
+2. **Ablate the reward block and refit**; the rise in held-out MSE
+   (`ΔMSE = error_reduced − error_full`) is reward's unique contribution.
+3. **Permutation test** on reward timing → `p`; a neuron is a candidate if
+   `ΔMSE > 0` and `p < 0.05`.
+
+### Ablation note — zero-out first, refit to confirm
+
+- **Zero-out (fast screen):** keep the fitted weights, set the reward input to 0
+  at inference. Cheap, but with stimulus weights frozen they can't absorb reward's
+  share, so it **over-credits reward** — treat a hit as a *candidate* only.
+- **Refit (confirm):** drop the reward column and re-estimate the weights so
+  stimulus/position/velocity can compensate. This is the honest unique-variance
+  test. The permutation test does not rescue the zero-out inflation (shuffling
+  reward breaks the stimulus–reward correlation, so the null can't see it).
 
 ## Rigor / controls
 
-- Train/test split, applied reflexively.
-- Permutation null built by shuffling the **reward column** (isolates reward's *unique* variance beyond the other regressors).
-- **Position and velocity as nuisance regressors** — reward has to explain variance beyond running and location, guarding against a motor confound.
-- **Cross-cohort check:** the signal should vanish in the unsupervised cohort (same stimuli, no reward).
+- **Cross-validation:** the effect must reproduce in both trial folds.
+- **Shuffle null** on the late/early labels (chance floor for the proportion).
+- **Cue-based reward event** — fair across cohorts (water is not required).
+- **Mouse as the replicate** — error bars are across mice, not neurons.
+- **Skip + report** any session with no cue-position variation or too few trials.
+- (Ablation track) position and velocity as nuisance regressors guard against a
+  motor confound.
 
 ## Interpretation
 
-A **significant** d is trustworthy reward attribution. A **null** d is ambiguous — reward may still matter but be too collinear with stimulus to separate (reward occurs only in the leaf corridor, so the two travel together). Treat nulls with that caveat rather than as clean evidence of "no reward encoding."
-
-### Method note — reward ablation: zero-out first, refit to confirm
-
-Per-neuron linear encoding model (full method in `project-meeting.md` / `method-flowchart.pdf`):
-predict each neuron's ΔF/F from stimulus + position + velocity + reward, then remove reward
-and see if test error rises. Two ways to remove reward:
-
-- **Zero-out (try FIRST):** keep the fitted weights, set the reward input to 0 at inference.
-  Cheap — fit the full model once, get the ablated prediction for free. Good fast screen over a
-  **small subset** of neurons (we are NOT running all ~90k). Downside: with the fitted stimulus
-  weights frozen, they can't absorb reward's share.
-- **Refit (do SECOND, to confirm):** drop the reward column and re-estimate the weights, so
-  stimulus/position/velocity can compensate. This is the honest "unique variance" test.
-
-**Why both:** reward and stimulus are correlated in the task (reward only in the leaf corridor),
-so zero-out **over-credits reward** — it can flag a neuron as reward-encoding when stimulus alone
-would explain it. So treat a zero-out hit as a *candidate* only, and re-test it with the refit
-before believing it. The permutation test does not rescue this (shuffling reward breaks the
-correlation, so the null can't see the inflation). Also confirm reward is coded {0,1} — zero only
-means "reward absent" if the off-state is genuinely 0.
-
-**A vs B in one line:** A = measure how much of the change is reward-free (shared), by region.
-B = find and localize the change that only reward produces.
+Support for the reward-prediction account looks like: the proportion *and*
+activation sit clearly **above the chance floor**, **rise** before→after learning,
+are concentrated in **anterior HVAs**, and appear in the **supervised** cohort
+only — the unsupervised cohort should stay near the floor. Because d′(late vs
+early) flags any reproducible late/early difference (broader than a *proven*
+anticipatory ramp), treat a hit as "worth the follow-up," not proof.
