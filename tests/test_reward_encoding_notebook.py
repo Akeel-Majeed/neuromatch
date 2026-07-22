@@ -148,18 +148,23 @@ def test_permute_reward_events_actually_breaks_timing():
 
 
 def test_part_b_uses_reward_ablation_supervised_only():
-    """Part B migrated from d'(late vs early cue) to the reward ablation.
+    """Part B's primary measure is the reward ablation; Part C re-adds the
+    cross-validated d'(late vs early cue) as a labelled comparison section.
 
-    The ablated block is water delivery, which only exists for supervised
-    mice, so Part B tracks the supervised cohort only.
+    The ablation's ablated block is water delivery, defined only for supervised
+    mice, and the d' comparison is run on the same supervised sessions for a
+    matched comparison, so both stay supervised-only.
     """
     source = source_text()
+    # primary ablation pipeline (Part B)
     assert "reward_ablation_session" in source
     assert "N_PERMUTATIONS_OVERTIME" in source
     assert "MIN_DELTA_R2" in source  # effect-size gate; p<0.05 alone flags 50-70%
-    for removed in ["DPRIME_THRESHOLD", "_reward_encoding", "reward_dprime_session",
-                    "Beh_unsup", "N_SHUFFLES_OVERTIME"]:
-        assert removed not in source, f"stale d'-era Part B content: {removed}"
+    # d' comparison section (Part C)
+    assert "reward_dprime_session" in source
+    assert "DPRIME_THRESHOLD" in source
+    # both analyses stay supervised-only: the unsupervised behaviour files never appear
+    assert "Beh_unsup" not in source, "d' comparison must stay supervised-only to match Part B"
 
 
 def test_result_schema_is_stable():
