@@ -1,127 +1,165 @@
 # Method — Reward-Encoding Neurons across Learning
 
-*Distilled from `method-flowchart.pdf`. **Primary method:** encoding-model
-**reward ablation** (full vs reward-block-removed ridge refits + reward-timing
-permutation test), tracked across training days by region, in the **supervised
-cohort**. On the Zhong et al. 2025 data.*
+*Single method: cross-validated **d′(late vs early cue)**, Zhong et al.'s own
+reward-prediction index (their Fig. 4f–g), tracked across training days by
+region and cohort. `method-flowchart.pdf` and `design-matrix-flowchart.pdf` are
+**stale** — they describe the retired encoding-model ablation; the flowchart
+below replaces them.*
 
 ## Goal
 
-Track how the **proportion** and the **activation** (signal strength) of
-**reward-encoding neurons** change across training days — broken down by brain
-region — in the supervised cohort.
+Track, per brain region and per training day, both the **proportion**
+(recruitment) and the **activation strength** (gain) of **reward-encoding
+neurons** — separately for the **supervised** (rewarded) and **unsupervised**
+(same stimuli, no reward) cohorts, with the individual **animal** as the
+paired replicate across the training timeline.
 
-## Why the method changed (again)
+## Flowchart
 
-An earlier revision of this document switched the across-days tracking from the
-ablation to a cross-validated d′(late vs early cue), chiefly for cross-cohort
-fairness: the cue exists with or without water, so supervised and unsupervised
-mice could be compared on the same index. We have now migrated back to the
-**reward ablation** as the primary measure, for one decisive reason:
+```mermaid
+flowchart TD
+    A["Behavior file per cohort x stage"] --> B["Balanced neuron sample per region<br/>reconstructed from 400-PC SVD"]
+    B --> C["Reward-zone activity per rewarded trial"]
+    C --> D["Split trials by cue timing<br/>(early vs late, median split)"]
+    D --> E["Interleaved 2-fold cross-validation"]
+    E --> F1["d' foldA, late vs early"]
+    E --> F2["d' foldB, late vs early"]
+    F1 --> G{"both folds pass |d'| >= 0.3<br/>with the same sign?"}
+    F2 --> G
+    G -->|yes| H["candidate: proportion += 1"]
+    G --> I["strength = mean of |d' foldA|, |d' foldB|<br/>reported for ALL sampled neurons"]
+    H --> J["aggregate by animal x stage x region x cohort"]
+    I --> J
+    J --> K["per-animal trajectories + cohort mean<br/>across train1/train2 before/after"]
+```
 
-- **Specificity.** d′(late vs early) flags *any* reproducible difference between
-  late- and early-cue trials — broader than reward encoding. The ablation asks
-  the sharper question: does removing the reward block hurt held-out prediction
-  *after* position, speed, stimulus, licks and cue have had their chance to
-  compensate, and does a permutation test on reward timing confirm it? That is
-  the direct test that a neuron **specifically encodes reward**.
+## Why d′, not the encoding-model reward ablation
 
-The cost, accepted explicitly:
+An earlier revision used an encoding-model **ablation**: refit a ridge model
+with the water-delivery reward block removed, and permutation-test the exact
+reward timing. Two problems retired it:
 
-- **The unsupervised cohort is dropped.** The ablated regressor is *water
-  delivery*; unsupervised mice receive none, so their ablation would score zero
-  **by construction** — a circular result. The supervised-vs-unsupervised
-  contrast is not tested by this analysis; the question is instead how reward
-  encoding evolves across learning within the supervised cohort.
+- **Collinearity inversion.** As mice learn, reward/lick/cue timing become
+  more tightly coupled, so the ablation's *unique*-variance signal for reward
+  can shrink even as true reward encoding grows — the measure inverted across
+  training days on real data. This is a bias (collinearity), not something
+  more mice or permutations fix.
+- **Supervised-only by construction.** The ablated regressor is *water
+  delivery*; unsupervised mice never receive any, so their ablation score is
+  zero regardless of the neurons' actual properties — not a real null result.
 
-## Inputs (shared)
+d′(late vs early cue) has neither problem: it never partitions variance
+between correlated regressors, and the sound cue plays whether or not water
+follows, so **the same index is well-defined for both cohorts** (confirmed on
+an unsupervised file, `TX88_2022_06_20_1`: `RewardFr` all-NaN, `isRew`
+all-False, but `SoundPos` present with the same range as supervised sessions —
+a genuine, non-degenerate control). The ablation code is retired to git
+history (commit `e7b8fba` and earlier), not carried forward.
 
-- **Neural data:** up to ~80k neurons, provided SVD(400-PC)-compressed; we
-  reconstruct a balanced sample **per region** (V1 · medial · lateral ·
-  anterior) per mouse.
-- **Behavior:** frame-aligned trial structure, corridor position, running,
-  stimulus, lick, cue and **water-reward** event times.
+## Is this a new finding, or a replication?
 
-## Single-session pilot (Part A)
+Mostly replication, framed differently — worth being honest about. d′(late vs
+early cue) restricted to the reward zone *is* Zhong et al.'s Fig. 4f–g method.
+What this notebook adds on top:
 
-One supervised after-learning session, run deep as a methods check: 750 neurons
-per region, the full expanded design matrix, grid-searched ridge alpha, 199
-permutations, zero-out vs refit comparison, and per-region candidate summaries.
-This validates the machinery that Part B then scales.
+- **Finer granularity.** The paper contrasts aggregate stages (e.g., task vs
+  naive); this tracks **four points per animal** — before/after within
+  *each* of train1 and train2 — so a trajectory, not a single snapshot.
+- **Recruitment vs gain, decomposed.** Proportion (how many neurons) and mean
+  `|d'|` (how strongly) are reported side by side per region, so a change can
+  be attributed to new neurons joining vs. existing ones firing harder.
+- **Paired by animal, not just by group.** Each animal contributes one
+  connected line across all four stages (where its sessions allow), instead
+  of only pooled means — this is the only valid "same subject over time"
+  comparison here, since there is **no cross-day cell tracking** (see below).
 
-## Primary pipeline — reward ablation across days (Part B)
+## No individual-neuron tracking
 
-Per session (supervised cohort; `train1`/`train2`, each before vs after
-learning), per mouse:
+Checked directly against `Imaging_Exp_info.npy` (the deposit's session
+manifest): for a given animal, "before" and "after" a training block are
+**separate recording sessions on different dates** (e.g., VR2: before =
+2021-03-20, after = 2021-04-06), each with its own independent SVD neuron
+indexing and no cell-registration file in the deposit. **A neuron index is
+not comparable across sessions.** Consequently:
 
-1. **Sample neurons** per region per mouse (default 250, capped at what each
-   region has) and reconstruct only those from the SVD.
-2. **Design matrix.** Stimulus identity; position bases; position×stimulus;
-   speed, movement, acceleration; reward, lick and cue lag bases; epochs;
-   landmarks. Standardized with a scaler fit on **training frames only**.
-3. **Split trials** odd/even (matches Zhong's supplied `ft_trInd_odd/even`).
-4. **Full vs reduced refits** at a fixed ridge alpha (`PART_B_ALPHA`, default
-   1.0 — grid search is skipped for runtime). Fit the full model on odd trials;
-   refit without the reward block; score both on even trials.
-   `ΔMSE = MSE_reduced − MSE_full` is reward's unique held-out contribution.
-5. **Permutation test.** Re-place each reward at a uniform random position
-   within its own trial (default 50 permutations), rebuild only the reward
-   columns, refit, and collect the null ΔMSE. (Permuting within-trial *offsets* among trials is not a valid
-   null here: reward timing is heavily stereotyped — offsets ~10±3 frames — so
-   offset shuffles barely move the events and flagged ~50% of neurons on a real
-   session; uniform re-placement restores a calibrated floor — a bogus-timing
-   control passes ~3% of neurons.)
-6. **Effect-size gate.** With ~9k training frames the permutation test detects
-   minuscule reward locking (ΔR² ≈ 0.002) in the *majority* of neurons — `p <
-   0.05` alone would flag 50–70% of all cells. A neuron therefore counts as a
-   candidate only if reward also adds at least `MIN_DELTA_R2` (default 0.01 =
-   1%) of held-out variance explained. This gate is part of the definition;
-   always report the value used.
-7. **Proportion + activation + firing.** Per (mouse, region): the **percentage
-   of candidates** (how many), the **mean ΔMSE over all sampled neurons**
-   (how strongly; unbiased by selection), and the **mean reward-zone activity
-   of the candidate neurons** (firing rate; the whole-session mean is ~0 for
-   deconvolved SVD activity, so it is taken in the 5–40 dm reward zone while
-   moving).
-8. **Aggregate — the mouse is the replicate.** Mean ± s.e.m. **across mice**
-   per stage × region. Neurons within a mouse are *not* independent replicates.
-9. **Chance floor.** The nominal 5% false-positive rate of the per-neuron
-   `p < 0.05` permutation test, drawn as a reference line — the signal is the
-   per-mouse *proportion* above that floor.
+- Every comparison here is at the **population level** — proportion and mean
+  `|d'|` over a fresh balanced sample each session — never "this specific
+  neuron got stronger."
+- The animal, imaged repeatedly over the timeline, is the valid unit of a
+  **paired** design; a tracked single neuron is not available with this data.
+- "Reward neurons stay constant, only firing changes" vs. "new neurons are
+  recruited" cannot be distinguished by tracking cells — both hypotheses
+  predict the same population-level signature (more/stronger flagged
+  neurons). The recruitment/gain decomposition above is the closest this
+  dataset gets to separating them.
 
-**Runtime budget.** Defaults (2 mice/stage, 250 neurons/region, 50
-permutations, fixed alpha) size Colab **Run all** at roughly 20 minutes; raise
-`MAX_MICE_PER_CONDITION`, `N_PER_REGION_OVERTIME`, or
-`N_PERMUTATIONS_OVERTIME` for more power.
+## Inputs
 
-### Ablation note — zero-out first, refit to confirm
+- **Neural data:** up to ~80k neurons, provided SVD(400-PC)-compressed; a
+  balanced sample per region (V1 · medial · lateral · anterior) is
+  reconstructed per (animal, stage).
+- **Behavior:** frame-aligned trial structure, corridor position, movement,
+  stimulus identity, and the sound-cue position/frame — **not** reward
+  timing, which this method never touches.
+- **Animal, not session, is the replicate.** The short animal id
+  (`mouse.split("_")[0]`) is what must recur across all four stages of a
+  cohort for an unbroken trajectory; the full session string (which encodes
+  the recording date) differs stage to stage even for the same animal.
 
-- **Zero-out (fast screen):** keep the fitted weights, set the reward input to 0
-  at inference. Cheap, but with stimulus weights frozen they can't absorb reward's
-  share, so it **over-credits reward** — treat a hit as a *candidate* only.
-- **Refit (confirm):** drop the reward column and re-estimate the weights so
-  stimulus/position/velocity can compensate. This is the honest unique-variance
-  test, and the one both parts use for classification. The permutation test does
-  not rescue the zero-out inflation (shuffling reward breaks the stimulus–reward
-  correlation, so the null can't see it).
+## Pipeline
+
+Per (cohort, stage, animal):
+
+1. **Sample neurons** per region (default 250, capped at what a region has)
+   and reconstruct only those from the SVD.
+2. **Reward-zone activity per rewarded trial.** Restrict to the rewarded
+   corridor, position 5–40 dm while moving, and average each neuron's
+   activity per trial.
+3. **Split by cue timing.** Rewarded trials are split into early-cue vs
+   late-cue by a median split on cue position. Skip the session (recorded in
+   `skipped`) if either group has fewer than 8 trials.
+4. **Cross-validated d′.** Sort trials by the early/late label, interleave
+   into two folds so each is a balanced early/late mix, and compute
+   `d' = 2*(mean_late - mean_early) / (std_late + std_early)` independently
+   per fold. A neuron is a **candidate** only if `|d'| >= 0.3` in **both**
+   folds with the **same sign** — a real anticipatory effect reproduces
+   across folds; noise rarely does by chance on both counts at once.
+5. **Proportion + activation.** Per (animal, stage, region): the **percentage
+   of candidates** (recruitment) and the **mean cross-validated `|d'|` over
+   all sampled neurons** (gain — unbiased by the candidate selection).
+6. **Chance floor.** An empirical null: the same cross-validated flag applied
+   to shuffled early/late labels (100 shuffles), averaged per cohort. Read a
+   line against its own cohort's floor, not zero.
+7. **Aggregate — the animal is the replicate.** Neurons within an animal are
+   not independent replicates; error bars and the "trajectory" line are
+   across animals.
+
+**Runtime budget.** Roughly 2 GB total across the paired animals found in the
+deposit (4 supervised, 6 unsupervised, each imaged in all four stages), cached
+per animal after the first download.
 
 ## Rigor / controls
 
-- **Permutation null** on reward timing — the classifier itself is inferential,
-  so no separate label-shuffle floor is needed; the nominal floor is 5%.
-- **Refit, not zero-out**, for every classification decision.
-- **Supervised cohort only** — water-based ablation is undefined (zero by
-  construction) for unsupervised mice.
-- **Mouse as the replicate** — error bars are across mice, not neurons.
-- **Skip + report** any session with too few reward events (< 10) or too few
-  trials to split.
-- Position and velocity as nuisance regressors guard against a motor confound.
+- **Cross-validated flag**, not a single-shot `|d'|>=0.3` on all trials —
+  the single-shot version is noisy enough at typical trial counts that pure
+  noise clears 0.3 often.
+- **Both cohorts on the same index** — no water-dependent step, so the
+  supervised-vs-unsupervised contrast is a fair one.
+- **Animal as the replicate** — error bars and trajectories are across
+  animals, never across neurons within one animal.
+- **Skip + report** any (cohort, stage, animal) with too few early/late-cue
+  trials to split, or no rewarded stimulus in the session.
+- **No cross-day cell tracking** — every claim is at the population level
+  (see above); do not read a rising proportion as "the same cells got
+  stronger."
 
 ## Interpretation
 
-Support for the reward-learning account looks like: the proportion *and*
-activation sit clearly **above the 5% nominal floor** and **rise** before→after
-learning, concentrated in **anterior HVAs**. Because candidates carry no
-multiple-comparison correction across neurons and a fixed ridge alpha is used
-for speed, treat borderline percentages near the floor as noise, and treat a
-hit as "worth the follow-up," not proof.
+Support for the reward-learning account looks like: the **supervised**
+proportion and `|d'|` sit clearly above their cohort's empirical chance floor
+and **rise** before→after learning, concentrated in **anterior HVAs**, while
+the **unsupervised** cohort's lines track their own floor throughout — Zhong
+et al.'s Fig. 4g dissociation (task p = 0.0069 vs. unsupervised p = 0.708),
+reproduced here as a per-animal trajectory rather than a single contrast.
+Because there is no multiple-comparison correction across regions or stages,
+treat one borderline crossing as "worth the follow-up," not proof.

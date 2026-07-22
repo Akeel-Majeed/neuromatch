@@ -31,11 +31,9 @@ def test_notebook_is_colab_ready_and_self_contained():
     assert nb["nbformat"] == 4
     assert nb["metadata"]["kernelspec"]["name"] == "python3"
     source = source_text()
-    assert "VR2_2021_04_06_1" in source
-    assert "54866333" in source and "54183860" in source and "54184214" in source
     assert "from src" not in source and "import reward_encoding" not in source
-    assert "N_PER_REGION = 750" in source
-    assert "N_PERMUTATIONS = 199" in source
+    assert "DPRIME_THRESHOLD = 0.3" in source
+    assert "N_PER_REGION = 250" in source
     # The notebook is the source of truth now, so committed outputs would be noise
     # in every diff. Clear them (Edit > Clear all outputs) before committing.
     assert all(cell.get("execution_count") is None for cell in nb["cells"] if cell["cell_type"] == "code")
@@ -54,12 +52,12 @@ def test_code_cells_compile_and_cell_ids_are_unique():
 def test_required_sections_exist():
     source = source_text()
     for heading in [
-        "Data download and validation",
-        "Balanced neuron sampling",
-        "Expanded design matrix",
-        "Ridge encoding model",
-        "Reward ablation and permutation test",
-        "Results and export",
+        "Data access",
+        "Region mapping and balanced neuron sampling",
+        "Cross-validated d′(late vs early cue)",
+        "Run across cohorts, stages, and animals",
+        "Results — proportion and activation across learning, by region and cohort",
+        "Interpretation checklist",
     ]:
         assert heading in source
 
@@ -80,106 +78,72 @@ def test_region_mapping_and_balanced_sampling():
     assert np.array_equal(selected, selected_again)
 
 
-def test_event_basis_is_aligned_and_boundary_safe():
-    ns = helper_namespace()
-    basis = ns["event_basis"](20, np.array([0, 10, 19]), 2.0, -1.0, 1.0, 4)
-    assert basis.shape == (20, 4)
-    assert np.isfinite(basis).all()
-    assert basis[10].sum() > 0
-
-
-def test_event_basis_skips_events_outside_the_recording():
-    ns = helper_namespace()
-    basis = ns["event_basis"](20, np.array([-500.0, 500.0]), 2.0, -1.0, 1.0, 4)
-    assert basis.shape == (20, 4)
-    assert not basis.any()
-
-
-def test_trial_masks_do_not_leak():
-    ns = helper_namespace()
-    trials = np.array([1, 1, 2, 2, 3, 3, 4, 4], dtype=float)
-    train, test = ns["odd_even_masks"](trials)
-    assert not np.any(train & test)
-    assert set(trials[train]) == {1, 3}
-    assert set(trials[test]) == {2, 4}
-
-
-def test_metrics_and_corrected_permutation_pvalues():
-    ns = helper_namespace()
-    y = np.array([[0.0, 1.0], [1.0, 2.0], [2.0, 3.0]])
-    mse, r2 = ns["regression_metrics"](y, y.copy())
-    np.testing.assert_allclose(mse, 0)
-    np.testing.assert_allclose(r2, 1)
-    observed = np.array([2.0, 0.0])
-    null = np.array([[1.0, 1.0], [3.0, -1.0], [0.0, 0.0]])
-    np.testing.assert_allclose(ns["permutation_pvalues"](observed, null), [0.5, 0.75])
-
-
-def test_synthetic_recovery():
-    ns = helper_namespace()
-    result = ns["run_synthetic_recovery_test"]()
-    assert result["injected_delta_mse"] > 0
-    assert result["injected_p"] < result["median_null_p"]
-
-
-def test_align_behavior_frames_trims_small_excess_only():
-    ns = helper_namespace()
-    beh = {field: np.arange(12.0) for field in ns["FRAME_FIELDS"]}
-    aligned = ns["align_behavior_frames"](beh, 10)
-    assert all(len(aligned[field]) == 10 for field in ns["FRAME_FIELDS"])
-    too_long = {field: np.arange(30.0) for field in ns["FRAME_FIELDS"]}
-    with np.testing.assert_raises(ValueError):
-        ns["align_behavior_frames"](too_long, 10)
-
-
-def test_permute_reward_events_actually_breaks_timing():
-    """Regression: real reward timing is stereotyped (~10±3 frames into a trial),
-    so permuting offsets among trials barely moved events and the null was
-    impotent (~53% 'candidates'). The null must re-place each reward at a
-    uniform within-trial position instead."""
+def test_reconstruct_selected_shape():
     ns = helper_namespace()
     rng = np.random.default_rng(0)
-    starts = np.arange(100.0) * 100
-    ends = starts + 90
-    events = starts + 10  # stereotyped timing, as in the real data
-    permuted = ns["permute_reward_events"](events, starts, ends, rng)
-    assert np.all(permuted >= starts) and np.all(permuted <= ends)
-    assert np.std(permuted - starts) > 10  # uniform spread, not the old ±3 shuffle
+    svd = {"U": rng.standard_normal((5, 10)).astype("float32"),
+           "V": rng.standard_normal((5, 20)).astype("float32")}
+    activity = ns["reconstruct_selected"](svd, [0, 2, 4])
+    assert activity.shape == (20, 3)  # frames x selected neurons
 
 
-def test_part_b_uses_reward_ablation_supervised_only():
-    """Part B's primary measure is the reward ablation; Part C re-adds the
-    cross-validated d'(late vs early cue) as a labelled comparison section.
+def test_dprime_synthetic_recovery():
+    """One ramping neuron among noise; the cross-validated flag must catch the
+    ramp and nothing else — the same self-check the notebook runs live."""
+    ns = helper_namespace()
+    result = ns["run_dprime_synthetic_check"]()
+    assert result["flagged"] == 1
+    assert result["ramp_strength"] >= ns["DPRIME_THRESHOLD"]
 
-    The ablation's ablated block is water delivery, defined only for supervised
-    mice, and the d' comparison is run on the same supervised sessions for a
-    matched comparison, so both stay supervised-only.
-    """
+
+def test_reward_encoding_is_cross_validated_not_single_shot():
+    """Regression: a single |d'|>=threshold on all trials is noisy with few
+    trials; both interleaved folds must agree in magnitude AND sign, or the
+    neuron must not be flagged even if each fold alone looks like a hit."""
+    ns = helper_namespace()
+    rng = np.random.default_rng(1)
+    late = np.array([False] * 20 + [True] * 20)  # pre-sorted -> argsort is identity
+    fold_a = np.arange(40) % 2 == 0
+    tm = rng.normal(0, 0.3, (1, 40)).astype(np.float32)
+    tm[0, fold_a & late] += 3.0     # fold A: late higher -> large positive d'
+    tm[0, fold_a & ~late] -= 3.0
+    tm[0, ~fold_a & late] -= 3.0    # fold B: late lower -> large negative d' (sign flip)
+    tm[0, ~fold_a & ~late] += 3.0
+    flag, strength = ns["_reward_encoding"](tm, late, ns["DPRIME_THRESHOLD"])
+    assert not flag[0], "opposite-sign folds must not be flagged as reward-encoding"
+    assert strength[0] > ns["DPRIME_THRESHOLD"]  # each fold alone would clear the bar
+
+
+def test_both_cohorts_present_for_a_fair_comparison():
+    """d'(late vs early cue) doesn't depend on reward, unlike the retired
+    ablation (which needed water and so was supervised-only). Both cohorts
+    should be scored on the same index for a fair comparison."""
     source = source_text()
-    # primary ablation pipeline (Part B)
-    assert "reward_ablation_session" in source
-    assert "N_PERMUTATIONS_OVERTIME" in source
-    assert "MIN_DELTA_R2" in source  # effect-size gate; p<0.05 alone flags 50-70%
-    # d' comparison section (Part C)
-    assert "reward_dprime_session" in source
-    assert "DPRIME_THRESHOLD" in source
-    # both analyses stay supervised-only: the unsupervised behaviour files never appear
-    assert "Beh_unsup" not in source, "d' comparison must stay supervised-only to match Part B"
+    assert "Beh_sup_train1_before_learning.npy" in source
+    assert "Beh_unsup_train1_before_learning.npy" in source
+    assert '"supervised"' in source and '"unsupervised"' in source
+
+
+def test_animal_pairing_uses_short_id_not_session_key():
+    """Before/after are different recording sessions (different dates) for the
+    same animal, so pairing must key on the short animal id, not the full
+    session string."""
+    source = source_text()
+    assert 'animal_id(session_key)' in source
+    assert 'session_key.split("_")[0]' in source
 
 
 def test_result_schema_is_stable():
     """The exported CSV keeps the columns downstream analysis reads."""
     source = source_text()
     for column in [
-        "neuron_index",
+        "cohort",
+        "stage",
         "region",
-        "mse_full",
-        "r2_full",
-        "mse_reduced",
-        "r2_reduced",
-        "delta_mse_refit",
-        "delta_r2_refit",
-        "permutation_p",
-        "reward_encoding_candidate",
+        "animal",
+        "mouse",
+        "pct_reward",
+        "mean_dprime",
+        "n_neurons",
     ]:
         assert f'"{column}"' in source, f"missing result column: {column}"
