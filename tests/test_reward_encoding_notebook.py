@@ -122,6 +122,31 @@ def test_synthetic_recovery():
     assert result["injected_p"] < result["median_null_p"]
 
 
+def test_align_behavior_frames_trims_small_excess_only():
+    ns = helper_namespace()
+    beh = {field: np.arange(12.0) for field in ns["FRAME_FIELDS"]}
+    aligned = ns["align_behavior_frames"](beh, 10)
+    assert all(len(aligned[field]) == 10 for field in ns["FRAME_FIELDS"])
+    too_long = {field: np.arange(30.0) for field in ns["FRAME_FIELDS"]}
+    with np.testing.assert_raises(ValueError):
+        ns["align_behavior_frames"](too_long, 10)
+
+
+def test_permute_reward_events_actually_breaks_timing():
+    """Regression: real reward timing is stereotyped (~10±3 frames into a trial),
+    so permuting offsets among trials barely moved events and the null was
+    impotent (~53% 'candidates'). The null must re-place each reward at a
+    uniform within-trial position instead."""
+    ns = helper_namespace()
+    rng = np.random.default_rng(0)
+    starts = np.arange(100.0) * 100
+    ends = starts + 90
+    events = starts + 10  # stereotyped timing, as in the real data
+    permuted = ns["permute_reward_events"](events, starts, ends, rng)
+    assert np.all(permuted >= starts) and np.all(permuted <= ends)
+    assert np.std(permuted - starts) > 10  # uniform spread, not the old ±3 shuffle
+
+
 def test_part_b_uses_reward_ablation_supervised_only():
     """Part B migrated from d'(late vs early cue) to the reward ablation.
 
@@ -131,8 +156,9 @@ def test_part_b_uses_reward_ablation_supervised_only():
     source = source_text()
     assert "reward_ablation_session" in source
     assert "N_PERMUTATIONS_OVERTIME" in source
+    assert "MIN_DELTA_R2" in source  # effect-size gate; p<0.05 alone flags 50-70%
     for removed in ["DPRIME_THRESHOLD", "_reward_encoding", "reward_dprime_session",
-                    "Beh_unsup", "N_SHUFFLES_OVERTIME", "REWARD_ZONE_DM"]:
+                    "Beh_unsup", "N_SHUFFLES_OVERTIME"]:
         assert removed not in source, f"stale d'-era Part B content: {removed}"
 
 

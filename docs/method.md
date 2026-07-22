@@ -64,15 +64,28 @@ learning), per mouse:
    1.0 — grid search is skipped for runtime). Fit the full model on odd trials;
    refit without the reward block; score both on even trials.
    `ΔMSE = MSE_reduced − MSE_full` is reward's unique held-out contribution.
-5. **Permutation test.** Shuffle reward-time offsets among rewarded trials
-   (default 50 permutations), rebuild only the reward columns, refit, and
-   collect the null ΔMSE. Candidate: `ΔMSE > 0` **and** `p < 0.05`.
-6. **Proportion + activation.** Per (mouse, region): the **percentage of
-   candidates** (how many) and the **mean ΔMSE over all sampled neurons**
-   (how strongly; unbiased by selection).
-7. **Aggregate — the mouse is the replicate.** Mean ± s.e.m. **across mice**
+5. **Permutation test.** Re-place each reward at a uniform random position
+   within its own trial (default 50 permutations), rebuild only the reward
+   columns, refit, and collect the null ΔMSE. (Permuting within-trial *offsets* among trials is not a valid
+   null here: reward timing is heavily stereotyped — offsets ~10±3 frames — so
+   offset shuffles barely move the events and flagged ~50% of neurons on a real
+   session; uniform re-placement restores a calibrated floor — a bogus-timing
+   control passes ~3% of neurons.)
+6. **Effect-size gate.** With ~9k training frames the permutation test detects
+   minuscule reward locking (ΔR² ≈ 0.002) in the *majority* of neurons — `p <
+   0.05` alone would flag 50–70% of all cells. A neuron therefore counts as a
+   candidate only if reward also adds at least `MIN_DELTA_R2` (default 0.01 =
+   1%) of held-out variance explained. This gate is part of the definition;
+   always report the value used.
+7. **Proportion + activation + firing.** Per (mouse, region): the **percentage
+   of candidates** (how many), the **mean ΔMSE over all sampled neurons**
+   (how strongly; unbiased by selection), and the **mean reward-zone activity
+   of the candidate neurons** (firing rate; the whole-session mean is ~0 for
+   deconvolved SVD activity, so it is taken in the 5–40 dm reward zone while
+   moving).
+8. **Aggregate — the mouse is the replicate.** Mean ± s.e.m. **across mice**
    per stage × region. Neurons within a mouse are *not* independent replicates.
-8. **Chance floor.** The nominal 5% false-positive rate of the per-neuron
+9. **Chance floor.** The nominal 5% false-positive rate of the per-neuron
    `p < 0.05` permutation test, drawn as a reference line — the signal is the
    per-mouse *proportion* above that floor.
 
