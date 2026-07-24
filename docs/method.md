@@ -2,9 +2,9 @@
 
 *Single method: cross-validated **d′(late vs early cue)**, Zhong et al.'s own
 reward-prediction index (their Fig. 4f–g), tracked across training days by
-region and cohort. `method-flowchart.pdf` and `design-matrix-flowchart.pdf` are
-**stale** — they describe the retired encoding-model ablation; the flowchart
-below replaces them.*
+region and cohort. A presentation-ready render of the flowchart below is
+`method-flowchart.pdf`. (The encoding-model ablation and its
+`design-matrix-flowchart.*` are retired — see "Why d′" below.)*
 
 ## Goal
 
@@ -110,7 +110,7 @@ not comparable across sessions.** Consequently:
 
 Per (cohort, stage, animal):
 
-1. **Sample neurons** per region (default 250, capped at what a region has)
+1. **Sample neurons** per region (default 750, capped at what a region has)
    and reconstruct only those from the SVD.
 2. **Reward-zone activity per rewarded trial.** Restrict to the rewarded
    corridor, position 5–40 dm while moving, and average each neuron's
